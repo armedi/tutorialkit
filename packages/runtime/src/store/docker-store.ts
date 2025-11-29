@@ -1,6 +1,7 @@
 import type { FileDescriptor, Files, FilesystemError, Lesson } from '@tutorialkit/types';
 import { atom, type ReadableAtom } from 'nanostores';
-import { DockerRuntime, type BootStatus, type PreviewInfo } from '../docker/index.js';
+
+import { type BootStatus, DockerRuntime, type PreviewInfo } from '../docker/index.js';
 import type { ITerminal } from '../docker/terminal.js';
 import { LessonFilesFetcher } from '../lesson-files.js';
 import { newTask, type Task } from '../tasks.js';
@@ -8,10 +9,10 @@ import { DockerPreviewsStore } from './docker-previews.js';
 import { DockerTerminalStore, type TerminalConfig } from './docker-terminal.js';
 import { TutorialRunner } from './docker-tutorial-runner.js';
 import {
-  EditorStore,
-  EditorConfig,
+  type EditorConfig,
   type EditorDocument,
   type EditorDocuments,
+  EditorStore,
   type ScrollPosition,
 } from './editor.js';
 import { StepsController } from './steps.js';
@@ -176,10 +177,7 @@ export class TutorialStore {
 
         this._runner.runCommands();
 
-        const [solution, files] = await Promise.all([
-          this._lessonFilesFetcher.getLessonSolution(lesson),
-          filesPromise,
-        ]);
+        const [solution, files] = await Promise.all([this._lessonFilesFetcher.getLessonSolution(lesson), filesPromise]);
 
         signal.throwIfAborted();
 
@@ -328,6 +326,69 @@ export class TutorialStore {
     return this._dockerRuntime.backendUrl;
   }
 
+  /**
+   * Retry booting the Docker runtime with the current lesson.
+   * Use this after configuring the backend URL to start/restart the container.
+   */
+  async retryBoot(): Promise<void> {
+    const lesson = this._lesson;
+
+    if (!lesson) {
+      return;
+    }
+
+    this._lessonTask?.cancel();
+    this.lessonFullyLoaded.set(false);
+
+    this._lessonTask = newTask(
+      async (signal) => {
+        const templatePromise = this._lessonFilesFetcher.getLessonTemplate(lesson);
+        const filesPromise = this._lessonFilesFetcher.getLessonFiles(lesson);
+
+        // boot Docker container with template files first
+        const template = await templatePromise;
+
+        signal.throwIfAborted();
+
+        // shutdown existing session if any, then boot fresh
+        if (this._dockerRuntime.sessionId) {
+          await this._dockerRuntime.shutdown();
+        }
+
+        await this._dockerRuntime.boot(template);
+
+        signal.throwIfAborted();
+
+        const preparePromise = this._runner.prepareFiles({ template: templatePromise, files: filesPromise, signal });
+
+        this._runner.runCommands();
+
+        const [solution, files] = await Promise.all([this._lessonFilesFetcher.getLessonSolution(lesson), filesPromise]);
+
+        signal.throwIfAborted();
+
+        this._lessonTemplate = template;
+        this._lessonFiles = files;
+        this._lessonSolution = solution;
+
+        this._editorStore.setDocuments(files);
+
+        if (lesson.data.focus === undefined) {
+          this._editorStore.setSelectedFile(undefined);
+        } else if (files[lesson.data.focus] !== undefined) {
+          this._editorStore.setSelectedFile(lesson.data.focus);
+        }
+
+        await preparePromise;
+
+        signal.throwIfAborted();
+
+        this.lessonFullyLoaded.set(true);
+      },
+      { ignoreCancel: true },
+    );
+  }
+
   /** Reset changed files back to lesson's initial state */
   reset() {
     const isReady = this.lessonFullyLoaded.value;
@@ -470,6 +531,7 @@ export class TutorialStore {
           // already connected, just restart the shell
           dockerTerminal.restartShell();
         }
+
         return;
       }
 
@@ -503,9 +565,11 @@ export class TutorialStore {
 
     // reconnect all terminals
     const config = this._terminalStore.terminalConfig.get();
+
     for (const panel of config.panels) {
       if (panel.dockerTerminal && panel.terminal) {
         panel.dockerTerminal.clearContainerError();
+
         // re-attach will reconnect
         this._dockerRuntime.attachTerminal(panel.id, panel.terminal);
       }

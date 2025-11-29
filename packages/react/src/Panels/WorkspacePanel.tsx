@@ -4,7 +4,7 @@ import type { I18n } from '@tutorialkit/types';
 import { type ComponentProps, useCallback, useEffect, useRef, useState } from 'react';
 import { type ImperativePanelHandle, Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
-import { BackendConfigModal, getStoredBackendUrl } from '../BackendConfig.js';
+import { BackendConfigModal } from '../BackendConfig.js';
 import { DialogProvider } from '../core/Dialog.js';
 import type { Theme } from '../core/types.js';
 import resizePanelStyles from '../styles/resize-panel.module.css';
@@ -53,33 +53,28 @@ export function WorkspacePanel({ tutorialStore, theme, dialog }: Props) {
   const terminalPanelRef = useRef<ImperativePanelHandle>(null);
   const terminalExpanded = useRef(false);
 
-  // Backend config modal state
+  // backend config modal state
   const bootStatus = useStore(tutorialStore.bootStatus);
   const bootError = useStore(tutorialStore.bootError);
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(() => {
-    // Show modal on first load if no backend URL is stored
-    if (typeof window !== 'undefined') {
-      return !getStoredBackendUrl();
-    }
-    return false;
-  });
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
-  // Open modal when boot status is error
+  // open modal when boot status is error
   useEffect(() => {
     if (bootStatus === 'error') {
       setIsConfigModalOpen(true);
     }
   }, [bootStatus]);
 
-  const handleConfigModalConnect = useCallback((url: string) => {
-    tutorialStore.setBackendUrl(url);
-    setIsConfigModalOpen(false);
-    // Re-trigger lesson loading to boot with new backend URL
-    const lesson = tutorialStore.lesson;
-    if (lesson) {
-      tutorialStore.setLesson(lesson);
-    }
-  }, [tutorialStore]);
+  const handleConfigModalConnect = useCallback(
+    (url: string) => {
+      tutorialStore.setBackendUrl(url);
+      setIsConfigModalOpen(false);
+
+      // retry booting with the new backend URL
+      tutorialStore.retryBoot();
+    },
+    [tutorialStore],
+  );
 
   const handleOpenConfigModal = useCallback(() => {
     setIsConfigModalOpen(true);
@@ -97,22 +92,20 @@ export function WorkspacePanel({ tutorialStore, theme, dialog }: Props) {
         error={bootStatus === 'error' ? bootError : undefined}
       />
       <PanelGroup className={resizePanelStyles.PanelGroup} id="right-panel-group" direction="vertical">
-      <DialogProvider value={dialog}>
-        <EditorSection
-          theme={theme}
-          tutorialStore={tutorialStore}
-          hasEditor={hasEditor}
-          hasPreviews={hasPreviews}
-          hideTerminalPanel={hideTerminalPanel}
+        <DialogProvider value={dialog}>
+          <EditorSection
+            theme={theme}
+            tutorialStore={tutorialStore}
+            hasEditor={hasEditor}
+            hasPreviews={hasPreviews}
+            hideTerminalPanel={hideTerminalPanel}
+          />
+        </DialogProvider>
+        <PanelResizeHandle
+          className={resizePanelStyles.PanelResizeHandle}
+          hitAreaMargins={{ fine: 5, coarse: 5 }}
+          disabled={!hasEditor}
         />
-      </DialogProvider>
-
-      <PanelResizeHandle
-        className={resizePanelStyles.PanelResizeHandle}
-        hitAreaMargins={{ fine: 5, coarse: 5 }}
-        disabled={!hasEditor}
-      />
-
         <PreviewsSection
           theme={theme}
           tutorialStore={tutorialStore}
@@ -122,12 +115,12 @@ export function WorkspacePanel({ tutorialStore, theme, dialog }: Props) {
           hasPreviews={hasPreviews}
           hasEditor={hasEditor}
           onConfigure={handleOpenConfigModal}
-        />      <PanelResizeHandle
-        className={resizePanelStyles.PanelResizeHandle}
-        hitAreaMargins={{ fine: 5, coarse: 5 }}
-        disabled={hideTerminalPanel || !hasPreviews}
-      />
-
+        />{' '}
+        <PanelResizeHandle
+          className={resizePanelStyles.PanelResizeHandle}
+          hitAreaMargins={{ fine: 5, coarse: 5 }}
+          disabled={hideTerminalPanel || !hasPreviews}
+        />
         <TerminalSection
           tutorialStore={tutorialStore}
           theme={theme}
@@ -140,7 +133,9 @@ export function WorkspacePanel({ tutorialStore, theme, dialog }: Props) {
       </PanelGroup>
     </>
   );
-}function EditorSection({ theme, tutorialStore, hasEditor }: PanelProps) {
+}
+
+function EditorSection({ theme, tutorialStore, hasEditor }: PanelProps) {
   const [helpAction, setHelpAction] = useState<'solve' | 'reset'>('reset');
   const selectedFile = useStore(tutorialStore.selectedFile);
   const currentDocument = useStore(tutorialStore.currentDocument);
