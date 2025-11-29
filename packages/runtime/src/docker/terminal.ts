@@ -1,3 +1,5 @@
+import { atom, type ReadableAtom } from 'nanostores';
+
 import type { DockerClient } from './client.js';
 import type { TerminalMessage } from './types.js';
 
@@ -18,6 +20,7 @@ export class DockerTerminal {
   private _isStarted = false;
   private _reconnectAttempts = 0;
   private _maxReconnectAttempts = 3;
+  private _containerError = atom<string | undefined>(undefined);
 
   constructor(client: DockerClient, terminalId: string = 'main') {
     this._client = client;
@@ -26,6 +29,14 @@ export class DockerTerminal {
 
   get isConnected(): boolean {
     return this._ws?.readyState === WebSocket.OPEN;
+  }
+
+  get containerError(): ReadableAtom<string | undefined> {
+    return this._containerError;
+  }
+
+  clearContainerError(): void {
+    this._containerError.set(undefined);
   }
 
   attach(terminal: ITerminal): void {
@@ -110,8 +121,15 @@ export class DockerTerminal {
           break;
 
         case 'error':
-          if (message.message && this._terminal) {
-            this._terminal.write(`\r\n\x1b[31mError: ${message.message}\x1b[0m\r\n`);
+          if (message.message) {
+            // check for container-related errors that should show retry UI
+            if (message.message.includes('Container not found')) {
+              this._containerError.set(message.message);
+            }
+
+            if (this._terminal) {
+              this._terminal.write(`\r\n\x1b[31mError: ${message.message}\x1b[0m\r\n`);
+            }
           }
           break;
 
@@ -159,6 +177,17 @@ export class DockerTerminal {
 
   write(data: string): void {
     this._sendMessage({ type: 'input', data });
+  }
+
+  /**
+   * Restart the shell in an already-connected terminal.
+   * Useful when recovering from container errors.
+   */
+  restartShell(): void {
+    if (this._ws?.readyState === WebSocket.OPEN) {
+      this._isStarted = false;
+      this._startShell();
+    }
   }
 
   disconnect(): void {

@@ -411,6 +411,9 @@ importers:
       dockerode:
         specifier: ^4.0.9
         version: 4.0.9
+      dockerode-compose:
+        specifier: ^1.4.0
+        version: 1.4.0
       express:
         specifier: ^4.21.2
         version: 4.21.2
@@ -430,6 +433,9 @@ importers:
       '@types/dockerode':
         specifier: ^3.3.47
         version: 3.3.47
+      '@types/dockerode-compose':
+        specifier: ^1.4.2
+        version: 1.4.2
       '@types/express':
         specifier: ^5.0.5
         version: 5.0.5
@@ -3859,6 +3865,12 @@ packages:
       '@types/ssh2': 1.15.5
     dev: true
 
+  /@types/dockerode-compose@1.4.2:
+    resolution: {integrity: sha512-7ce0kmixAZsRYR/sIX0loCjVjM6V1u87lLfNLCqpkHtOoQvLA58tbA7bbogSgWsCIUDzig6onmLYkVBgpEQAmQ==}
+    dependencies:
+      '@types/dockerode': 3.3.47
+    dev: true
+
   /@types/dockerode@3.3.47:
     resolution: {integrity: sha512-ShM1mz7rCjdssXt7Xz0u1/R2BJC7piWa3SJpUBiVjCf2A3XNn4cP6pUVaD8bLanpPVVn4IKzJuw3dOvkJ8IbYw==}
     dependencies:
@@ -6017,6 +6029,16 @@ packages:
       readable-stream: 3.6.2
       split-ca: 1.0.1
       ssh2: 1.17.0
+    transitivePeerDependencies:
+      - supports-color
+    dev: false
+
+  /dockerode-compose@1.4.0:
+    resolution: {integrity: sha512-6x5ZlK06H+cgoTR4ffucqN5kWVvxNvxwTLcHQUZcegCJBEDGrdzXMOEGDMsxbHwiLtLo2dNwG0eZK7B2RfEWSw==}
+    dependencies:
+      dockerode: 4.0.9
+      js-yaml: 4.1.0
+      tar-fs: 2.1.4
     transitivePeerDependencies:
       - supports-color
     dev: false

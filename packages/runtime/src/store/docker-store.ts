@@ -430,6 +430,96 @@ export class TutorialStore {
     this._terminalStore.attachTerminal(id, terminal);
   }
 
+  /**
+   * Get container error for a specific terminal.
+   * Returns a ReadableAtom that can be subscribed to for error state changes.
+   */
+  getTerminalContainerError(terminalId: string): ReadableAtom<string | undefined> | undefined {
+    return this._terminalStore.getContainerError(terminalId);
+  }
+
+  /**
+   * Retry connecting a terminal that failed with a container error.
+   * Re-polls session status and reconnects the terminal.
+   */
+  async retryTerminalConnection(terminalId: string): Promise<void> {
+    const dockerTerminal = this._terminalStore.getDockerTerminal(terminalId);
+
+    if (!dockerTerminal) {
+      throw new Error(`Terminal ${terminalId} not found`);
+    }
+
+    // clear the error state
+    dockerTerminal.clearContainerError();
+
+    // poll session status until container is ready
+    const maxWaitTime = 30000;
+    const initialDelay = 500;
+    const maxDelay = 4000;
+    const startTime = Date.now();
+    let delay = initialDelay;
+
+    while (Date.now() - startTime < maxWaitTime) {
+      const sessionInfo = await this._dockerRuntime.checkSessionInfo();
+
+      if (sessionInfo?.containerReady) {
+        // container is ready, reconnect terminal
+        if (!dockerTerminal.isConnected) {
+          await dockerTerminal.connect();
+        } else {
+          // already connected, just restart the shell
+          dockerTerminal.restartShell();
+        }
+        return;
+      }
+
+      if (sessionInfo?.status === 'error' || sessionInfo?.status === 'stopped') {
+        throw new Error(sessionInfo.error || 'Container is not running');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 1.5, maxDelay);
+    }
+
+    throw new Error('Timeout waiting for container to be ready');
+  }
+
+  /**
+   * Restart the session by deleting and recreating it.
+   * This is a more aggressive recovery option when retry doesn't work.
+   */
+  async restartSession(): Promise<void> {
+    if (!this._lessonTemplate) {
+      throw new Error('No lesson template available to restart session');
+    }
+
+    this.lessonFullyLoaded.set(false);
+
+    // shutdown existing session
+    await this._dockerRuntime.shutdown();
+
+    // boot a new session with the template
+    await this._dockerRuntime.boot(this._lessonTemplate);
+
+    // reconnect all terminals
+    const config = this._terminalStore.terminalConfig.get();
+    for (const panel of config.panels) {
+      if (panel.dockerTerminal && panel.terminal) {
+        panel.dockerTerminal.clearContainerError();
+        // re-attach will reconnect
+        this._dockerRuntime.attachTerminal(panel.id, panel.terminal);
+      }
+    }
+
+    // re-run commands if we have lesson files
+    if (this._lessonFiles) {
+      await this._runner.updateFiles(this._lessonFiles);
+      this._runner.runCommands();
+    }
+
+    this.lessonFullyLoaded.set(true);
+  }
+
   /** Callback that should be called when terminal resizes */
   onTerminalResize(cols: number, rows: number) {
     if (cols && rows) {

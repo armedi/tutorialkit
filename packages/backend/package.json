@@ -32,6 +32,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "dockerode": "^4.0.9",
+    "dockerode-compose": "^1.4.0",
     "express": "^4.21.2",
     "uuid": "^10.0.0",
     "ws": "^8.18.3",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/dockerode": "^3.3.47",
+    "@types/dockerode-compose": "^1.4.2",
     "@types/express": "^5.0.5",
     "@types/node": "^20.14.2",
     "@types/uuid": "^10.0.0",

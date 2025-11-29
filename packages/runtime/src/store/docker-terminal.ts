@@ -1,5 +1,5 @@
 import type { TerminalSchema } from '@tutorialkit/types';
-import { atom } from 'nanostores';
+import { atom, type ReadableAtom } from 'nanostores';
 import type { DockerRuntime } from '../docker/index.js';
 import type { DockerTerminal, ITerminal } from '../docker/terminal.js';
 
@@ -115,5 +115,23 @@ export class DockerTerminalStore {
         panel.dockerTerminal.resize(cols, rows);
       }
     }
+  }
+
+  /**
+   * Get the container error atom for a terminal panel.
+   */
+  getContainerError(terminalId: string): ReadableAtom<string | undefined> | undefined {
+    const config = this.terminalConfig.get();
+    const panel = config.panels.find((p) => p.id === terminalId);
+    return panel?.dockerTerminal?.containerError;
+  }
+
+  /**
+   * Get the DockerTerminal instance for a panel.
+   */
+  getDockerTerminal(terminalId: string): DockerTerminal | undefined {
+    const config = this.terminalConfig.get();
+    const panel = config.panels.find((p) => p.id === terminalId);
+    return panel?.dockerTerminal;
   }
 }

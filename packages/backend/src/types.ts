@@ -1,7 +1,12 @@
+import type Docker from 'dockerode';
+import type DockerodeCompose from 'dockerode-compose';
+
 export interface Session {
   id: string;
   tempDir: string;
   containerId?: string;
+  compose?: DockerodeCompose;
+  container?: Docker.Container;
   createdAt: Date;
   lastActivity: Date;
   terminals: Map<string, TerminalSession>;
@@ -9,7 +14,7 @@ export interface Session {
 
 export interface TerminalSession {
   id: string;
-  execId?: string;
+  exec?: Docker.Exec;
   stream?: NodeJS.ReadWriteStream;
 }
 
@@ -30,6 +35,7 @@ export interface PortMapping {
 export interface SessionInfo {
   id: string;
   status: 'starting' | 'running' | 'stopped' | 'error';
+  containerReady: boolean;
   ports: PortMapping[];
   error?: string;
 }

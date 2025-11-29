@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { parse as parseYaml } from 'yaml';
+
+import { createCompose, getContainerByProject, getContainerByProjectWithRetry } from './docker.js';
 import type { PortMapping, Session, SessionInfo, TerminalSession } from './types.js';
 
 const sessions = new Map<string, Session>();
@@ -25,10 +26,10 @@ export async function createSession(
   const sessionId = uuidv4();
   const tempDir = path.join(os.tmpdir(), `tutorialkit-${sessionId}`);
 
-  // Create temp directory
+  // create temp directory
   await fs.mkdir(tempDir, { recursive: true });
 
-  // Write all files to temp directory
+  // write all files to temp directory
   await writeFilesToDir(tempDir, files);
 
   const session: Session = {
@@ -41,28 +42,25 @@ export async function createSession(
 
   sessions.set(sessionId, session);
 
-  // Start container via docker-compose
+  // start container via docker-compose
   const output = await startContainer(session);
 
   return { session, output };
 }
 
-export async function writeFilesToDir(
-  dir: string,
-  files: Record<string, string | { base64: string }>,
-): Promise<void> {
+export async function writeFilesToDir(dir: string, files: Record<string, string | { base64: string }>): Promise<void> {
   for (const [filePath, content] of Object.entries(files)) {
     const fullPath = path.join(dir, filePath);
     const dirPath = path.dirname(fullPath);
 
-    // Ensure directory exists
+    // ensure directory exists
     await fs.mkdir(dirPath, { recursive: true });
 
-    // Write file content
+    // write file content
     if (typeof content === 'string') {
       await fs.writeFile(fullPath, content, 'utf-8');
     } else {
-      // Base64 encoded binary content
+      // base64 encoded binary content
       const buffer = Buffer.from(content.base64, 'base64');
       await fs.writeFile(fullPath, buffer);
     }
@@ -74,6 +72,7 @@ export async function writeSessionFiles(
   files: Record<string, string | { base64: string }>,
 ): Promise<void> {
   const session = sessions.get(sessionId);
+
   if (!session) {
     throw new Error(`Session ${sessionId} not found`);
   }
@@ -83,84 +82,69 @@ export async function writeSessionFiles(
 }
 
 async function startContainer(session: Session): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const output: string[] = [];
+  const composeFile = path.join(session.tempDir, 'docker-compose.yml');
+  const projectName = `tutorialkit-${session.id}`;
 
-    // Check if docker-compose.yml exists
-    const composeFile = path.join(session.tempDir, 'docker-compose.yml');
+  try {
+    // create compose instance
+    const compose = createCompose(composeFile, projectName);
+    session.compose = compose;
 
-    const proc = spawn('docker', ['compose', 'up', '-d', '--build'], {
-      cwd: session.tempDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    // pull images and start containers
+    await compose.pull();
 
-    proc.stdout?.on('data', (data) => {
-      output.push(data.toString());
-    });
+    const state = await compose.up();
 
-    proc.stderr?.on('data', (data) => {
-      output.push(data.toString());
-    });
+    // get the container reference with retry logic
+    const container = await getContainerByProjectWithRetry(projectName, 'app');
 
-    proc.on('close', async (code) => {
-      const outputStr = output.join('');
+    if (container) {
+      session.container = container;
 
-      if (code === 0) {
-        // Get container ID
-        try {
-          const containerId = await getContainerId(session.tempDir);
-          session.containerId = containerId;
-          resolve(outputStr);
-        } catch (error) {
-          resolve(outputStr); // Still resolve, container might be running
-        }
-      } else {
-        // Return output even on failure - let frontend see the error
-        resolve(outputStr);
-      }
-    });
+      const info = await container.inspect();
+      session.containerId = info.Id;
+    }
 
-    proc.on('error', (error) => {
-      reject(error);
-    });
-  });
+    // return compose state as output
+    return JSON.stringify(state, null, 2);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return `Error starting container: ${message}`;
+  }
 }
 
-async function getContainerId(tempDir: string): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    const proc = spawn('docker', ['compose', 'ps', '-q'], {
-      cwd: tempDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+async function getContainerId(session: Session): Promise<string | undefined> {
+  if (session.containerId) {
+    return session.containerId;
+  }
 
-    let output = '';
-    proc.stdout?.on('data', (data) => {
-      output += data.toString();
-    });
+  const projectName = `tutorialkit-${session.id}`;
+  const container = await getContainerByProject(projectName, 'app');
 
-    proc.on('close', () => {
-      const containerId = output.trim().split('\n')[0];
-      resolve(containerId || undefined);
-    });
+  if (container) {
+    const info = await container.inspect();
+    return info.Id;
+  }
 
-    proc.on('error', () => {
-      resolve(undefined);
-    });
-  });
+  return undefined;
 }
 
 export async function getSessionInfo(sessionId: string): Promise<SessionInfo | null> {
   const session = sessions.get(sessionId);
+
   if (!session) {
     return null;
   }
 
   const ports = await getSessionPorts(sessionId);
 
-  // Check if container is running
+  // check if container is running
   let status: SessionInfo['status'] = 'running';
+  let containerReady = false;
+
   if (!session.containerId) {
-    const containerId = await getContainerId(session.tempDir);
+    const containerId = await getContainerId(session);
+
     if (containerId) {
       session.containerId = containerId;
     } else {
@@ -168,20 +152,53 @@ export async function getSessionInfo(sessionId: string): Promise<SessionInfo | n
     }
   }
 
+  // check if container is actually running and ready
+  if (session.container) {
+    try {
+      const info = await session.container.inspect();
+      containerReady = info.State?.Running === true;
+
+      if (!containerReady && info.State?.Status === 'exited') {
+        status = 'stopped';
+      }
+    } catch {
+      // container may have been removed
+      containerReady = false;
+      status = 'stopped';
+    }
+  } else if (session.containerId) {
+    // try to get container reference if we only have ID
+    const projectName = `tutorialkit-${session.id}`;
+    const container = await getContainerByProject(projectName, 'app');
+
+    if (container) {
+      session.container = container;
+
+      try {
+        const info = await container.inspect();
+        containerReady = info.State?.Running === true;
+      } catch {
+        containerReady = false;
+      }
+    }
+  }
+
   return {
     id: session.id,
     status,
+    containerReady,
     ports,
   };
 }
 
 export async function getSessionPorts(sessionId: string): Promise<PortMapping[]> {
   const session = sessions.get(sessionId);
+
   if (!session) {
     return [];
   }
 
-  // Parse docker-compose.yml to get port mappings
+  // parse docker-compose.yml to get port mappings
   try {
     const composeFile = path.join(session.tempDir, 'docker-compose.yml');
     const content = await fs.readFile(composeFile, 'utf-8');
@@ -194,6 +211,7 @@ export async function getSessionPorts(sessionId: string): Promise<PortMapping[]>
         if (service.ports) {
           for (const portMapping of service.ports) {
             const parsed = parsePortMapping(portMapping);
+
             if (parsed) {
               ports.push(parsed);
             }
@@ -218,11 +236,13 @@ function parsePortMapping(mapping: string | number | { target: number; published
   }
 
   if (typeof mapping === 'string') {
-    // Format: "hostPort:containerPort" or "hostPort:containerPort/protocol"
+    // format: "hostPort:containerPort" or "hostPort:containerPort/protocol"
     const parts = mapping.split(':');
+
     if (parts.length === 2) {
       const [hostPart, containerPart] = parts;
       const [containerPort, protocol] = containerPart.split('/');
+
       return {
         containerPort: parseInt(containerPort, 10),
         hostPort: parseInt(hostPart, 10),
@@ -244,32 +264,34 @@ function parsePortMapping(mapping: string | number | { target: number; published
 
 export async function deleteSession(sessionId: string): Promise<string> {
   const session = sessions.get(sessionId);
+
   if (!session) {
     throw new Error(`Session ${sessionId} not found`);
   }
 
-  // Clear cleanup timer
+  // clear cleanup timer
   const timer = sessionCleanupTimers.get(sessionId);
+
   if (timer) {
     clearTimeout(timer);
     sessionCleanupTimers.delete(sessionId);
   }
 
-  // Close all terminal connections
+  // close all terminal connections
   for (const terminal of session.terminals.values()) {
     if (terminal.stream) {
       terminal.stream.end();
     }
   }
 
-  // Stop container via docker-compose
+  // stop container via docker-compose
   const output = await stopContainer(session);
 
-  // Clean up temp directory
+  // clean up temp directory
   try {
     await fs.rm(session.tempDir, { recursive: true, force: true });
   } catch {
-    // Ignore cleanup errors
+    // ignore cleanup errors
   }
 
   sessions.delete(sessionId);
@@ -278,42 +300,37 @@ export async function deleteSession(sessionId: string): Promise<string> {
 }
 
 async function stopContainer(session: Session): Promise<string> {
-  return new Promise((resolve) => {
-    const output: string[] = [];
+  try {
+    if (session.compose) {
+      await session.compose.down({ volumes: true });
+      return 'Container stopped and removed successfully';
+    }
 
-    const proc = spawn('docker', ['compose', 'down', '--volumes', '--remove-orphans'], {
-      cwd: session.tempDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    // if no compose instance, create one to stop
+    const composeFile = path.join(session.tempDir, 'docker-compose.yml');
+    const projectName = `tutorialkit-${session.id}`;
+    const compose = createCompose(composeFile, projectName);
+    await compose.down({ volumes: true });
 
-    proc.stdout?.on('data', (data) => {
-      output.push(data.toString());
-    });
-
-    proc.stderr?.on('data', (data) => {
-      output.push(data.toString());
-    });
-
-    proc.on('close', () => {
-      resolve(output.join(''));
-    });
-
-    proc.on('error', () => {
-      resolve(output.join(''));
-    });
-  });
+    return 'Container stopped and removed successfully';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return `Error stopping container: ${message}`;
+  }
 }
 
 export function scheduleSessionCleanup(sessionId: string): void {
-  // Clear existing timer if any
+  // clear existing timer if any
   const existingTimer = sessionCleanupTimers.get(sessionId);
+
   if (existingTimer) {
     clearTimeout(existingTimer);
   }
 
-  // Schedule new cleanup
+  // schedule new cleanup
   const timer = setTimeout(async () => {
     const session = sessions.get(sessionId);
+
     if (session && session.terminals.size === 0) {
       console.log(`Cleaning up inactive session ${sessionId}`);
       await deleteSession(sessionId);
@@ -325,6 +342,7 @@ export function scheduleSessionCleanup(sessionId: string): void {
 
 export function cancelSessionCleanup(sessionId: string): void {
   const timer = sessionCleanupTimers.get(sessionId);
+
   if (timer) {
     clearTimeout(timer);
     sessionCleanupTimers.delete(sessionId);
@@ -333,6 +351,7 @@ export function cancelSessionCleanup(sessionId: string): void {
 
 export function updateSessionActivity(sessionId: string): void {
   const session = sessions.get(sessionId);
+
   if (session) {
     session.lastActivity = new Date();
   }
@@ -340,6 +359,7 @@ export function updateSessionActivity(sessionId: string): void {
 
 export function addTerminalToSession(sessionId: string, terminalId: string): TerminalSession {
   const session = sessions.get(sessionId);
+
   if (!session) {
     throw new Error(`Session ${sessionId} not found`);
   }
@@ -356,18 +376,20 @@ export function addTerminalToSession(sessionId: string, terminalId: string): Ter
 
 export function removeTerminalFromSession(sessionId: string, terminalId: string): void {
   const session = sessions.get(sessionId);
+
   if (!session) {
     return;
   }
 
   const terminal = session.terminals.get(terminalId);
+
   if (terminal?.stream) {
     terminal.stream.end();
   }
 
   session.terminals.delete(terminalId);
 
-  // If no more terminals, schedule cleanup
+  // if no more terminals, schedule cleanup
   if (session.terminals.size === 0) {
     scheduleSessionCleanup(sessionId);
   }

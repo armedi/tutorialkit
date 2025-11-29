@@ -1,18 +1,12 @@
-import express, { type Request, type Response, type NextFunction } from 'express';
-import cors from 'cors';
 import { createServer } from 'node:http';
-import { WebSocketServer, type WebSocket } from 'ws';
 import { URL } from 'node:url';
+import cors from 'cors';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import { type WebSocket, WebSocketServer } from 'ws';
 import { checkDockerHealth } from './docker.js';
-import {
-  createSession,
-  deleteSession,
-  getSessionInfo,
-  getSessionPorts,
-  writeSessionFiles,
-} from './sessions.js';
+import { createSession, deleteSession, getSessionInfo, getSessionPorts, writeSessionFiles } from './sessions.js';
 import { handleTerminalConnection, killAllProcesses } from './terminal.js';
-import type { CreateSessionRequest, WriteFilesRequest, HealthResponse } from './types.js';
+import type { CreateSessionRequest, HealthResponse, WriteFilesRequest } from './types.js';
 
 interface ServerOptions {
   port: number;
@@ -33,9 +27,7 @@ export function createBackendServer(options: ServerOptions) {
     const response: HealthResponse = {
       status: dockerHealth.available ? 'ok' : 'error',
       docker: dockerHealth,
-      message: dockerHealth.available
-        ? 'TutorialKit backend is running'
-        : dockerHealth.error,
+      message: dockerHealth.available ? 'TutorialKit backend is running' : dockerHealth.error,
     };
 
     res.status(dockerHealth.available ? 200 : 503).json(response);
@@ -100,6 +92,7 @@ export function createBackendServer(options: ServerOptions) {
         res.status(404).json({ error: error.message });
         return;
       }
+
       next(error);
     }
   });
@@ -115,6 +108,7 @@ export function createBackendServer(options: ServerOptions) {
         res.status(404).json({ error: error.message });
         return;
       }
+
       next(error);
     }
   });

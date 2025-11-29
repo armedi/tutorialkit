@@ -11,6 +11,7 @@ export interface PortMapping {
 export interface SessionInfo {
   id: string;
   status: 'starting' | 'running' | 'stopped' | 'error';
+  containerReady: boolean;
   ports: PortMapping[];
   error?: string;
 }
