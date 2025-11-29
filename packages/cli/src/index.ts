@@ -39,7 +39,7 @@ async function runCommand(cmd: CLICommand, flags: yargs.Arguments): Promise<numb
     case 'help': {
       printHelp({
         commandName: pkg.name,
-        prolog: `${primaryLabel(pkg.name)} ${chalk.green(`v${pkg.version}`)} Create tutorial apps powered by WebContainer API`,
+        prolog: `${primaryLabel(pkg.name)} ${chalk.green(`v${pkg.version}`)} Create tutorial apps powered by Docker`,
         usage: ['[command] [...options]', '[ -h | --help | -v | --version ]'],
         tables: {
           Commands: [

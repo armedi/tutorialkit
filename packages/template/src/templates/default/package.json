@@ -1,8 +1,9 @@
 {
-  "name": "example-lib",
+  "name": "tutorial-app",
   "private": true,
   "scripts": {
-    "start": "node ./src/index.js"
+    "start": "node ./src/index.js",
+    "dev": "node --watch ./src/index.js"
   },
   "dependencies": {
     "servor": "4.0.2"

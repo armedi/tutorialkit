@@ -10,7 +10,7 @@ export const commandSchema = z.union([
   z.tuple([z.string(), z.string()]),
 
   z.strictObject({
-    command: z.string().describe('Command to execute in WebContainer.'),
+    command: z.string().describe('Command to execute in Docker container.'),
     title: z.string().describe('Title to show for this step in the Prepare Environment section.'),
   }),
 ]);
@@ -304,6 +304,9 @@ export const webcontainerSchema = commandsSchema.extend({
     .optional()
     .describe('Display a button for downloading the current lesson as `.zip` file.'),
 });
+
+/** Runtime configuration schema (alias for webcontainerSchema for backward compatibility) */
+export const runtimeSchema = webcontainerSchema;
 
 export const baseSchema = webcontainerSchema.extend({
   title: z.string().describe('The title of the part, chapter, or lesson.'),

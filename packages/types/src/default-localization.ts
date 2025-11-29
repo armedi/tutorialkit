@@ -3,9 +3,9 @@ import type { Lesson } from './entities/index.js';
 export const DEFAULT_LOCALIZATION = {
   partTemplate: 'Part ${index}: ${title}',
   noPreviewNorStepsText: 'No preview to run nor steps to show',
-  startWebContainerText: 'Run this tutorial',
+  startRuntimeText: 'Run this tutorial',
   editPageText: 'Edit this page',
-  webcontainerLinkText: 'Powered by WebContainers',
+  poweredByText: 'Powered by TutorialKit',
   filesTitleText: 'Files',
   fileTreeCreateFileText: 'Create file',
   fileTreeCreateFolderText: 'Create folder',
@@ -19,4 +19,8 @@ export const DEFAULT_LOCALIZATION = {
   toggleTerminalButtonText: 'Toggle Terminal',
   solveButtonText: 'Solve',
   resetButtonText: 'Reset',
+  /** @deprecated Use startRuntimeText instead */
+  startWebContainerText: 'Run this tutorial',
+  /** @deprecated Use poweredByText instead */
+  webcontainerLinkText: 'Powered by WebContainers',
 } satisfies Required<Lesson['data']['i18n']>;

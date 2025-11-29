@@ -1,8 +1,18 @@
 import { useStore } from '@nanostores/react';
 import type { PreviewInfo, TutorialStore } from '@tutorialkit/runtime';
 import type { I18n } from '@tutorialkit/types';
-import { reloadPreview } from '@webcontainer/api/utils';
 import { createElement, forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
+
+/**
+ * Reload an iframe preview by setting its src to itself.
+ */
+function reloadPreview(iframe: HTMLIFrameElement): void {
+  const src = iframe.src;
+
+  if (src) {
+    iframe.src = src;
+  }
+}
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { BootScreen } from '../BootScreen.js';
 import resizePanelStyles from '../styles/resize-panel.module.css';

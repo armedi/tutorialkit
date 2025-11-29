@@ -145,15 +145,15 @@ export class FilesMap {
 
     const files: Files = {};
 
-    for (const [webcontainerPath, filePath] of filePaths) {
+    for (const [templatePath, filePath] of filePaths) {
       const buffer = fs.readFileSync(filePath);
 
       try {
         const stringContent = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
 
-        files[webcontainerPath] = stringContent;
+        files[templatePath] = stringContent;
       } catch {
-        files[webcontainerPath] = { base64: buffer.toString('base64') };
+        files[templatePath] = { base64: buffer.toString('base64') };
       }
     }
 
@@ -192,7 +192,7 @@ interface CheckCycleContext {
   visitedNodes: string[];
 }
 
-type FilePaths = { [webcontainerPath: string]: /* filePath: */ string };
+type FilePaths = { [templatePath: string]: /* filePath: */ string };
 
 async function getAllFiles(dir: string, result: FilePaths): Promise<void> {
   const filePaths = await glob(`${glob.convertPathToPattern(dir)}/**/*`, {
@@ -202,11 +202,11 @@ async function getAllFiles(dir: string, result: FilePaths): Promise<void> {
   });
 
   for (const filePath of filePaths) {
-    result[webcontainerPath(dir, filePath)] = filePath;
+    result[toTemplatePath(dir, filePath)] = filePath;
   }
 }
 
-function webcontainerPath(dir: string, filePath: string) {
+function toTemplatePath(dir: string, filePath: string) {
   const result = `/${path.relative(dir, filePath)}`;
 
   // normalize path separators

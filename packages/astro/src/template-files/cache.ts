@@ -93,7 +93,7 @@ export class FilesMapCache {
       return false;
     }
 
-    // mark the path as "hot", meaning we should refresh the files in webcontainer once the file generation has completed
+    // mark the path as "hot", meaning we should refresh the files in container once the file generation has completed
     this._hotPaths.add(fileMapPath);
 
     return cacheValue;

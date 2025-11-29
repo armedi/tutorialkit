@@ -10,8 +10,9 @@ interface Props {
 
 export function BootScreen({ className, tutorialStore }: Props) {
   const steps = useStore(tutorialStore.steps);
-  const { startWebContainerText, noPreviewNorStepsText } = tutorialStore.lesson?.data.i18n ?? {};
+  const { noPreviewNorStepsText } = tutorialStore.lesson?.data.i18n ?? {};
   const bootStatus = useStore(tutorialStore.bootStatus);
+  const bootError = useStore(tutorialStore.bootError);
 
   // workaround to prevent the hydration error caused by bootStatus always being 'unknown' server-side
   const [isClient, setIsClient] = useState(false);
@@ -22,8 +23,18 @@ export function BootScreen({ className, tutorialStore }: Props) {
 
   return (
     <div className={classNames('flex-grow w-full flex justify-center items-center text-sm', className)}>
-      {isClient && bootStatus === 'blocked' ? (
-        <Button onClick={() => tutorialStore.unblockBoot()}>{startWebContainerText}</Button>
+      {isClient && bootStatus === 'error' ? (
+        <div className="text-center p-4">
+          <div className="text-red-500 mb-2">Connection Error</div>
+          <p className="text-tk-elements-app-textColor/70 text-xs max-w-xs">{bootError}</p>
+        </div>
+      ) : isClient && (bootStatus === 'checking' || bootStatus === 'connecting') ? (
+        <div className="text-center">
+          <div className="inline-block mr-2 i-svg-spinners-90-ring-with-bg scale-105 text-tk-elements-status-active-iconColor" />
+          <span className="text-tk-elements-status-active-textColor">
+            {bootStatus === 'checking' ? 'Checking backend...' : 'Connecting...'}
+          </span>
+        </div>
       ) : steps ? (
         <ul className="space-y-1">
           {steps.map((step, index) => (
@@ -70,13 +81,3 @@ function toTextColor(status: Step['status']): string {
   }
 }
 
-function Button({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  return (
-    <button
-      className="flex font-500 disabled:opacity-32 items-center text-sm ml-2 px-4 py-1 rounded-md bg-tk-elements-bootScreen-primaryButton-backgroundColor text-tk-elements-bootScreen-primaryButton-textColor hover:bg-tk-elements-bootScreen-primaryButton-backgroundColorHover hover:text-tk-elements-bootScreen-primaryButton-textColorHover"
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}

@@ -1,0 +1,53 @@
+{
+  "name": "@tutorialkit/backend",
+  "version": "1.0.0",
+  "description": "TutorialKit Docker backend service",
+  "author": "TutorialKit",
+  "type": "module",
+  "bugs": "https://github.com/stackblitz/tutorialkit/issues",
+  "homepage": "https://github.com/stackblitz/tutorialkit",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stackblitz/tutorialkit.git",
+    "directory": "packages/backend"
+  },
+  "bin": {
+    "tutorialkit-backend": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "dev": "pnpm run build --watch --preserveWatchOutput",
+    "start": "node dist/cli.js start",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dockerode": "^4.0.9",
+    "express": "^4.21.2",
+    "uuid": "^10.0.0",
+    "ws": "^8.18.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/dockerode": "^3.3.47",
+    "@types/express": "^5.0.5",
+    "@types/node": "^20.14.2",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.5.3",
+    "vitest": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

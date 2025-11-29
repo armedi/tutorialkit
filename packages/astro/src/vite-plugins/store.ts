@@ -1,6 +1,6 @@
 /**
  * A plugin that let users write components that can interact with the tutorial
- * state, indirectly acting on the editor and WebContainer.
+ * state, indirectly acting on the editor and Docker container.
  *
  * The virtual module can be imported as:
  *

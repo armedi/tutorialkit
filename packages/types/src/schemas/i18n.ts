@@ -16,24 +16,28 @@ export const i18nSchema = z.object({
   editPageText: z.string().optional().describe('Text of the edit page link.'),
 
   /**
-   * Text of the WebContainer link.
+   * Text shown in the footer link.
    *
-   * @default 'Powered by WebContainers'
+   * @default 'Powered by TutorialKit'
    */
-  webcontainerLinkText: z.string().optional().describe('Text of the WebContainer link.'),
+  poweredByText: z.string().optional().describe('Text shown in the footer link.'),
 
   /**
-   * Text shown on the call to action button to start webcontainer when boot was blocked
-   * due to memory restrictions.
+   * Text shown on the call to action button to start the runtime.
    *
-   * @default 'Start WebContainer'
+   * @default 'Run this tutorial'
    */
-  startWebContainerText: z
-    .string()
-    .optional()
-    .describe(
-      'Text shown on the call to action button to start webcontainer when boot was blocked due to memory restrictions.',
-    ),
+  startRuntimeText: z.string().optional().describe('Text shown on the call to action button to start the runtime.'),
+
+  /**
+   * @deprecated Use poweredByText instead
+   */
+  webcontainerLinkText: z.string().optional().describe('Deprecated: Use poweredByText instead.'),
+
+  /**
+   * @deprecated Use startRuntimeText instead
+   */
+  startWebContainerText: z.string().optional().describe('Deprecated: Use startRuntimeText instead.'),
 
   /**
    * Text shown in the preview section when there are no steps to run and no preview to show.

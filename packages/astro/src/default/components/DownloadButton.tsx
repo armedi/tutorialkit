@@ -1,4 +1,5 @@
-import { tutorialStore, webcontainer as webcontainerPromise } from './webcontainer.js';
+import JSZip from 'jszip';
+import { tutorialStore } from './webcontainer.js';
 
 export function DownloadButton() {
   return (
@@ -19,8 +20,22 @@ async function onClick() {
     throw new Error('Missing lesson');
   }
 
-  const webcontainer = await webcontainerPromise;
-  const data = await webcontainer.export('/home/tutorial', { format: 'zip', excludes: ['node_modules'] });
+  // Get files from the Docker runtime
+  const files = tutorialStore.documents.get();
+  const zip = new JSZip();
+
+  for (const [filePath, document] of Object.entries(files)) {
+    // Skip node_modules
+    if (filePath.includes('node_modules')) {
+      continue;
+    }
+
+    // Remove leading slash for zip paths
+    const zipPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+    zip.file(zipPath, document.value);
+  }
+
+  const data = await zip.generateAsync({ type: 'blob' });
 
   let filename =
     typeof lesson.data.downloadAsZip === 'object'
@@ -34,7 +49,7 @@ async function onClick() {
   const link = document.createElement('a');
   link.style.display = 'none';
   link.download = filename;
-  link.href = URL.createObjectURL(new Blob([data] as any, { type: 'application/zip' }));
+  link.href = URL.createObjectURL(data);
 
   document.body.appendChild(link);
   link.click();

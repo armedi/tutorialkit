@@ -1,20 +1,13 @@
 /**
- * This code must be executed before WebContainer boots and be executed as soon as possible.
- * This ensures that when the authentication flow is complete in a popup, the popup is closed quickly.
+ * Setup code for TutorialKit Docker runtime.
+ * No authentication needed for local Docker backend.
  */
-import { auth } from '@webcontainer/api';
 import { authStore } from '../stores/auth-store.js';
 
-const authConfig = __WC_CONFIG__;
+// Docker runtime doesn't require authentication
+export const useAuth = false;
 
-export const useAuth = __ENTERPRISE__ && !!authConfig;
-
-// this condition is here to make sure the branch is removed by esbuild if it evaluates to false
-if (__ENTERPRISE__) {
-  if (authConfig && !import.meta.env.SSR) {
-    authStore.set(auth.init(authConfig));
-
-    auth.on('auth-failed', (reason) => authStore.set({ status: 'auth-failed', ...reason }));
-    auth.on('logged-out', () => authStore.set({ status: 'need-auth' }));
-  }
+// Auth store is always in 'no-auth' state for Docker runtime
+if (!import.meta.env.SSR) {
+  authStore.set({ status: 'no-auth' });
 }

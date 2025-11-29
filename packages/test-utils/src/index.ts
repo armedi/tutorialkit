@@ -1,186 +1,126 @@
 import path from 'node:path';
-import type { DirectoryNode, FileNode, FileSystemTree, SpawnOptions, WebContainer } from '@webcontainer/api';
 import { vi, type Mocked } from 'vitest';
 
-interface FakeProcess {
-  pid: number;
-
-  command: string;
-  args: string[];
-  options?: SpawnOptions;
-
-  exit: Promise<number>;
-  output: ReadableStream<string>;
-  input: WritableStream<string>;
-  kill(): void;
-  resize(cols: number, rows: number): void;
-}
-
-export type MockedWebContainer = Mocked<WebContainer> & {
-  _fakeFs: FileSystemTree;
-  _fakeProcesses: FakeProcess[];
-};
-
-export type FakeProcessFactory = (
-  command: string,
-  args: string[],
-  options?: SpawnOptions,
-) => { exit: Promise<number>; output?: ReadableStream<string>; input?: WritableStream<string> };
-
-const defaultProcessFactory: FakeProcessFactory = () => {
-  return {
-    exit: Promise.resolve(0),
+interface FileNode {
+  file: {
+    contents: string | Uint8Array;
   };
-};
-
-let fakeProcessFactory = defaultProcessFactory;
-
-export function setProcessFactory(factory: FakeProcessFactory) {
-  fakeProcessFactory = factory;
 }
 
-export function resetProcessFactory() {
-  fakeProcessFactory = defaultProcessFactory;
+interface DirectoryNode {
+  directory: FileSystemTree;
 }
 
-vi.mock('@webcontainer/api', () => {
-  const WebContainer = vi.fn<[], MockedWebContainer>(function (this: MockedWebContainer) {
-    this.fs = {
-      readdir: vi.fn(async () => []),
-      readFile: vi.fn(async (filePath) => {
-        const fileNode = getFileNode(this._fakeFs, filePath);
+type FileSystemTree = Record<string, FileNode | DirectoryNode>;
 
-        if (!fileNode) {
-          throw new Error(`No file found at ${filePath}`);
-        }
+interface FakeTerminal {
+  id: string;
+  onData: ((data: string) => void) | null;
+  write(data: string): void;
+}
 
-        return fileNode.file.contents as any;
-      }),
-      writeFile: vi.fn(async (filePath, contents) => {
+export interface MockedDockerRuntime {
+  _fakeFs: FileSystemTree;
+  _fakeTerminals: FakeTerminal[];
+  boot(): Promise<void>;
+  writeFiles(files: Record<string, string | { base64: string }>): Promise<void>;
+  readFile(filePath: string): Promise<string>;
+  fileExists(filePath: string): Promise<boolean>;
+  folderExists(folderPath: string): Promise<boolean>;
+  createFolder(folderPath: string): Promise<void>;
+  getTerminal(id: string): FakeTerminal;
+  shutdown(): Promise<void>;
+}
+
+export function createMockDockerRuntime(): Mocked<MockedDockerRuntime> {
+  const runtime: MockedDockerRuntime = {
+    _fakeFs: {},
+    _fakeTerminals: [],
+
+    boot: vi.fn(async () => {
+      // Simulate boot delay
+    }),
+
+    writeFiles: vi.fn(async function (this: MockedDockerRuntime, files) {
+      for (const [filePath, contents] of Object.entries(files)) {
         const parentFolder = path.dirname(filePath);
-        const folderNode = getDirNode(this._fakeFs, parentFolder);
+        let folderNode = getDirNode(this._fakeFs, parentFolder);
 
         if (!folderNode) {
-          throw new Error(`No folder found at ${parentFolder}`);
+          // Create parent directories
+          const segments = parentFolder.split('/').filter(Boolean);
+          let current = this._fakeFs;
+
+          for (const segment of segments) {
+            if (!current[segment]) {
+              current[segment] = { directory: {} };
+            }
+
+            current = (current[segment] as DirectoryNode).directory;
+          }
+
+          folderNode = getDirNode(this._fakeFs, parentFolder);
         }
 
-        folderNode.directory[path.basename(filePath)] = { file: { contents } };
-      }),
-      mkdir: vi.fn(async () => '' as any),
-      rm: vi.fn(async (filePath, { recursive } = {}) => {
-        const parentFolder = path.dirname(filePath);
-        const folderNode = getDirNode(this._fakeFs, parentFolder);
-
-        if (!folderNode) {
-          throw new Error(`No folder found at ${parentFolder}`);
+        if (folderNode) {
+          const value = typeof contents === 'string' ? contents : atob(contents.base64);
+          folderNode.directory[path.basename(filePath)] = { file: { contents: value } };
         }
+      }
+    }),
 
-        const fileName = path.basename(filePath);
+    readFile: vi.fn(async function (this: MockedDockerRuntime, filePath: string) {
+      const fileNode = getFileNode(this._fakeFs, filePath);
 
-        if (!recursive && 'directory' in folderNode.directory[fileName]) {
-          throw new Error(`Cannot recursively delete folder ${filePath}`);
-        }
-
-        delete folderNode.directory[fileName];
-      }),
-      rename: vi.fn(async () => {
-        // noop
-      }),
-      watch: vi.fn(() => ({
-        close: vi.fn(),
-      })),
-    };
-
-    this._fakeFs = {};
-    this._fakeProcesses = [];
-
-    return this;
-  });
-
-  (WebContainer as any).boot = vi.fn(async () => {
-    return new WebContainer();
-  });
-
-  WebContainer.prototype.spawn = vi.fn(async function (
-    this: MockedWebContainer,
-    command: string,
-    args: string[],
-    options?: SpawnOptions,
-  ) {
-    const {
-      exit,
-      output = new ReadableStream<string>({
-        start(controller) {
-          controller.close();
-        },
-      }),
-      input = new WritableStream<string>({
-        write() {
-          // noop
-        },
-      }),
-    } = fakeProcessFactory(command, args, options);
-
-    const fakeProcess: FakeProcess = {
-      pid: this._fakeProcesses.length,
-      command,
-      args,
-      options,
-      exit,
-      output,
-      input,
-      kill: () => {
-        output.cancel();
-        input.close();
-        this._fakeProcesses = this._fakeProcesses.filter((p) => p !== fakeProcess);
-      },
-      resize() {
-        // noop
-      },
-    };
-
-    Object.defineProperties(fakeProcess, {
-      pid: { enumerable: false },
-      exit: { enumerable: false },
-      output: { enumerable: false },
-      input: { enumerable: false },
-      kill: { enumerable: false },
-      resize: { enumerable: false },
-    });
-
-    this._fakeProcesses.push(fakeProcess);
-
-    return fakeProcess;
-  });
-
-  WebContainer.prototype.dispose = vi.fn();
-
-  WebContainer.prototype.mount = vi.fn(async function (this: MockedWebContainer, tree: FileSystemTree) {
-    mergeFileSystem(this._fakeFs, tree);
-  });
-
-  return { WebContainer };
-});
-
-function mergeFileSystem(mergedTree: FileSystemTree, incomingTree: FileSystemTree) {
-  for (const [path, value] of Object.entries(incomingTree)) {
-    if ('file' in value) {
-      mergedTree[path] = value;
-    } else {
-      let subTree: FileSystemTree;
-
-      if (mergedTree[path] && 'directory' in mergedTree[path]) {
-        subTree = (mergedTree[path] as DirectoryNode).directory;
-      } else {
-        subTree = {};
-        mergedTree[path] = {
-          directory: subTree,
-        };
+      if (!fileNode) {
+        throw new Error(`No file found at ${filePath}`);
       }
 
-      mergeFileSystem(subTree, value.directory);
-    }
-  }
+      return fileNode.file.contents as string;
+    }),
+
+    fileExists: vi.fn(async function (this: MockedDockerRuntime, filePath: string) {
+      return !!getFileNode(this._fakeFs, filePath);
+    }),
+
+    folderExists: vi.fn(async function (this: MockedDockerRuntime, folderPath: string) {
+      return !!getDirNode(this._fakeFs, folderPath);
+    }),
+
+    createFolder: vi.fn(async function (this: MockedDockerRuntime, folderPath: string) {
+      const segments = folderPath.split('/').filter(Boolean);
+      let current = this._fakeFs;
+
+      for (const segment of segments) {
+        if (!current[segment]) {
+          current[segment] = { directory: {} };
+        }
+
+        current = (current[segment] as DirectoryNode).directory;
+      }
+    }),
+
+    getTerminal: vi.fn(function (this: MockedDockerRuntime, id: string) {
+      let terminal = this._fakeTerminals.find((t) => t.id === id);
+
+      if (!terminal) {
+        terminal = {
+          id,
+          onData: null,
+          write: vi.fn(),
+        };
+        this._fakeTerminals.push(terminal);
+      }
+
+      return terminal;
+    }),
+
+    shutdown: vi.fn(async () => {
+      // Cleanup
+    }),
+  };
+
+  return runtime as Mocked<MockedDockerRuntime>;
 }
 
 function getFileNode(tree: FileSystemTree, filePath: string): FileNode | undefined {

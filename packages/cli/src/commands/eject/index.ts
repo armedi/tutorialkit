@@ -21,7 +21,6 @@ const TUTORIALKIT_VERSION = pkg.version;
 
 const REQUIRED_DEPENDENCIES = [
   '@tutorialkit/runtime',
-  '@webcontainer/api',
   'nanostores',
   '@nanostores/react',
   'kleur',

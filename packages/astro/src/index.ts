@@ -7,7 +7,7 @@ import { tutorialkitCore } from './vite-plugins/core.js';
 import { userlandCSS, watchUserlandCSS } from './vite-plugins/css.js';
 import { overrideComponents, type OverrideComponentsOptions } from './vite-plugins/override-components.js';
 import { tutorialkitStore } from './vite-plugins/store.js';
-import { WebContainerFiles } from './webcontainer-files/index.js';
+import { TemplateFiles } from './template-files/index.js';
 
 export interface Options {
   /**
@@ -29,37 +29,15 @@ export interface Options {
 
   /**
    * The value of the Cross-Origin-Embedder-Policy header for the dev server.
-   * This is required for webcontainer to works.
-   *
-   * Using credentialless lets you embed images from third party more easily.
-   * However only Firefox and Chrome supports credentialless.
-   *
-   * @see https://webcontainers.io/guides/configuring-headers
    *
    * @default 'require-corp'
    */
   isolation?: 'require-corp' | 'credentialless';
 
   /**
-   * Configuration options when using the Enterprise
-   * version of WebContainer API.
+   * Default backend URL for Docker runtime.
    */
-  enterprise?: {
-    /**
-     * The StackBlitz editor origin.
-     */
-    editorOrigin: string;
-
-    /**
-     * The client id.
-     */
-    clientId: string;
-
-    /**
-     * The OAuth scope.
-     */
-    scope: string;
-  };
+  backendUrl?: string;
 
   /**
    * Expressive code plugins.
@@ -82,11 +60,11 @@ export default function createPlugin({
   defaultRoutes = true,
   components,
   isolation,
-  enterprise,
+  backendUrl,
   expressiveCodePlugins = [],
   expressiveCodeThemes,
 }: Options = {}): AstroIntegration {
-  const webcontainerFiles = new WebContainerFiles();
+  const templateFiles = new TemplateFiles();
 
   let _config: AstroConfig;
 
@@ -120,8 +98,7 @@ export default function createPlugin({
                   ],
             },
             define: {
-              __ENTERPRISE__: `${!!enterprise}`,
-              __WC_CONFIG__: enterprise ? JSON.stringify(enterprise) : 'undefined',
+              __BACKEND_CONFIG__: backendUrl ? JSON.stringify({ defaultUrl: backendUrl }) : 'undefined',
             },
             ssr: {
               noExternal: ['@tutorialkit/astro', '@tutorialkit/react'],
@@ -173,17 +150,17 @@ export default function createPlugin({
         const { server, logger } = options;
         const projectRoot = fileURLToPath(_config.root);
 
-        await webcontainerFiles.serverSetup(projectRoot, options);
+        await templateFiles.serverSetup(projectRoot, options);
 
         watchUserlandCSS(server, logger);
       },
       async 'astro:server:done'() {
-        await webcontainerFiles.serverDone();
+        await templateFiles.serverDone();
       },
       async 'astro:build:done'(astroBuildDoneOptions) {
         const projectRoot = fileURLToPath(_config.root);
 
-        await webcontainerFiles.buildAssets(projectRoot, astroBuildDoneOptions);
+        await templateFiles.buildAssets(projectRoot, astroBuildDoneOptions);
       },
     },
   };

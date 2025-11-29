@@ -1,6 +1,8 @@
 import type { FilesRefList, Files, EditorSchema, FileDescriptor } from '@tutorialkit/types';
 import { atom, map, computed } from 'nanostores';
-import { EditorConfig } from '../webcontainer/editor-config.js';
+import { EditorConfig } from '../docker/editor-config.js';
+
+export { EditorConfig };
 
 export interface EditorDocument {
   value: string | Uint8Array;
