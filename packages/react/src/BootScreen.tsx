@@ -6,9 +6,10 @@ import { classNames } from './utils/classnames.js';
 interface Props {
   className?: string;
   tutorialStore: TutorialStore;
+  onConfigure?: () => void;
 }
 
-export function BootScreen({ className, tutorialStore }: Props) {
+export function BootScreen({ className, tutorialStore, onConfigure }: Props) {
   const steps = useStore(tutorialStore.steps);
   const { noPreviewNorStepsText } = tutorialStore.lesson?.data.i18n ?? {};
   const bootStatus = useStore(tutorialStore.bootStatus);
@@ -26,7 +27,16 @@ export function BootScreen({ className, tutorialStore }: Props) {
       {isClient && bootStatus === 'error' ? (
         <div className="text-center p-4">
           <div className="text-red-500 mb-2">Connection Error</div>
-          <p className="text-tk-elements-app-textColor/70 text-xs max-w-xs">{bootError}</p>
+          <p className="text-tk-elements-app-textColor/70 text-xs max-w-xs mb-3">{bootError}</p>
+          {onConfigure && (
+            <button
+              type="button"
+              onClick={onConfigure}
+              className="px-4 py-2 text-sm rounded-md bg-tk-elements-primaryButton-backgroundColor text-tk-elements-primaryButton-textColor hover:bg-tk-elements-primaryButton-backgroundColorHover"
+            >
+              Configure Backend
+            </button>
+          )}
         </div>
       ) : isClient && (bootStatus === 'checking' || bootStatus === 'connecting') ? (
         <div className="text-center">
@@ -80,4 +90,3 @@ function toTextColor(status: Step['status']): string {
     }
   }
 }
-

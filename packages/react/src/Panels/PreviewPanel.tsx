@@ -13,6 +13,7 @@ function reloadPreview(iframe: HTMLIFrameElement): void {
     iframe.src = src;
   }
 }
+
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { BootScreen } from '../BootScreen.js';
 import resizePanelStyles from '../styles/resize-panel.module.css';
@@ -23,6 +24,7 @@ interface Props {
   toggleTerminal?: () => void;
   tutorialStore: TutorialStore;
   i18n: I18n;
+  onConfigure?: () => void;
 }
 
 const previewsContainer = globalThis.document ? document.getElementById('previews-container')! : ({} as HTMLElement);
@@ -34,119 +36,121 @@ export type ImperativePreviewHandle = {
 };
 
 export const PreviewPanel = memo(
-  forwardRef<ImperativePreviewHandle, Props>(({ showToggleTerminal, toggleTerminal, i18n, tutorialStore }, ref) => {
-    const expectedPreviews = useStore(tutorialStore.previews);
-    const iframeRefs = useRef<IFrameRef[]>([]);
+  forwardRef<ImperativePreviewHandle, Props>(
+    ({ showToggleTerminal, toggleTerminal, i18n, tutorialStore, onConfigure }, ref) => {
+      const expectedPreviews = useStore(tutorialStore.previews);
+      const iframeRefs = useRef<IFrameRef[]>([]);
 
-    const onResize = useCallback(() => {
-      for (const { ref, container } of iframeRefs.current) {
-        if (!ref || !container) {
-          continue;
+      const onResize = useCallback(() => {
+        for (const { ref, container } of iframeRefs.current) {
+          if (!ref || !container) {
+            continue;
+          }
+
+          const { left, top, width, height } = container.getBoundingClientRect();
+          ref.style.left = `${left}px`;
+          ref.style.top = `${top}px`;
+          ref.style.height = `${height}px`;
+          ref.style.width = `${width}px`;
+        }
+      }, []);
+
+      const activePreviewsCount = expectedPreviews.reduce((count, preview) => (preview.ready ? count + 1 : count), 0);
+      const hasPreviews = activePreviewsCount > 0;
+
+      useImperativeHandle(
+        ref,
+        () => ({
+          reload: () => {
+            for (const iframe of iframeRefs.current) {
+              if (iframe.ref) {
+                iframe.ref.src = iframe.ref.src;
+              }
+            }
+          },
+        }),
+        [],
+      );
+
+      useEffect(() => {
+        // we update the iframes position at max fps if we have any
+        if (hasPreviews) {
+          const cancel = requestAnimationFrameLoop(onResize);
+
+          previewsContainer.style.display = 'block';
+
+          return () => {
+            previewsContainer.style.display = 'none';
+            cancel();
+          };
         }
 
-        const { left, top, width, height } = container.getBoundingClientRect();
-        ref.style.left = `${left}px`;
-        ref.style.top = `${top}px`;
-        ref.style.height = `${height}px`;
-        ref.style.width = `${width}px`;
-      }
-    }, []);
+        return undefined;
+      }, [hasPreviews]);
 
-    const activePreviewsCount = expectedPreviews.reduce((count, preview) => (preview.ready ? count + 1 : count), 0);
-    const hasPreviews = activePreviewsCount > 0;
+      adjustLength(iframeRefs.current, activePreviewsCount, newIframeRef);
+      preparePreviewsContainer(activePreviewsCount);
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        reload: () => {
-          for (const iframe of iframeRefs.current) {
-            if (iframe.ref) {
-              iframe.ref.src = iframe.ref.src;
-            }
-          }
-        },
-      }),
-      [],
-    );
-
-    useEffect(() => {
-      // we update the iframes position at max fps if we have any
-      if (hasPreviews) {
-        const cancel = requestAnimationFrameLoop(onResize);
-
-        previewsContainer.style.display = 'block';
-
-        return () => {
-          previewsContainer.style.display = 'none';
-          cancel();
-        };
+      // update preview refs
+      for (const [index, iframeRef] of iframeRefs.current.entries()) {
+        if (!iframeRef.ref) {
+          iframeRef.ref = previewsContainer.children.item(index) as HTMLIFrameElement;
+        }
       }
 
-      return undefined;
-    }, [hasPreviews]);
-
-    adjustLength(iframeRefs.current, activePreviewsCount, newIframeRef);
-    preparePreviewsContainer(activePreviewsCount);
-
-    // update preview refs
-    for (const [index, iframeRef] of iframeRefs.current.entries()) {
-      if (!iframeRef.ref) {
-        iframeRef.ref = previewsContainer.children.item(index) as HTMLIFrameElement;
-      }
-    }
-
-    if (!hasPreviews) {
-      return (
-        <div className="panel-container transition-theme bg-tk-elements-panel-backgroundColor text-tk-elements-panel-textColor">
-          <div className="panel-header border-b border-tk-elements-app-borderColor justify-between">
-            <div className="panel-title">
-              <div className="panel-icon i-ph-lightning-duotone"></div>
-              <span className="text-sm">{i18n.prepareEnvironmentTitleText}</span>
+      if (!hasPreviews) {
+        return (
+          <div className="panel-container transition-theme bg-tk-elements-panel-backgroundColor text-tk-elements-panel-textColor">
+            <div className="panel-header border-b border-tk-elements-app-borderColor justify-between">
+              <div className="panel-title">
+                <div className="panel-icon i-ph-lightning-duotone"></div>
+                <span className="text-sm">{i18n.prepareEnvironmentTitleText}</span>
+              </div>
+              {showToggleTerminal && (
+                <button
+                  className="panel-button px-2 py-0.5 -mr-1 -my-1"
+                  title="Toggle Terminal"
+                  onClick={() => toggleTerminal?.()}
+                >
+                  <span className="panel-button-icon i-ph-terminal-window-duotone"></span>
+                  <span className="text-sm">{i18n.toggleTerminalButtonText}</span>
+                </button>
+              )}
             </div>
-            {showToggleTerminal && (
-              <button
-                className="panel-button px-2 py-0.5 -mr-1 -my-1"
-                title="Toggle Terminal"
-                onClick={() => toggleTerminal?.()}
-              >
-                <span className="panel-button-icon i-ph-terminal-window-duotone"></span>
-                <span className="text-sm">{i18n.toggleTerminalButtonText}</span>
-              </button>
-            )}
+            <BootScreen tutorialStore={tutorialStore} onConfigure={onConfigure} />
           </div>
-          <BootScreen tutorialStore={tutorialStore} />
-        </div>
-      );
-    }
-
-    const previews = expectedPreviews.filter((preview) => preview.ready);
-    const defaultSize = 100 / previews.length;
-    const minSize = 20;
-
-    const children = [];
-
-    for (const [index, preview] of previews.entries()) {
-      children.push(
-        <Panel defaultSize={defaultSize} minSize={minSize}>
-          <Preview
-            iframe={iframeRefs.current[index]}
-            preview={preview}
-            previewCount={previews.length}
-            first={index === 0}
-            last={index === previews.length - 1}
-            toggleTerminal={toggleTerminal}
-            i18n={i18n}
-          />
-        </Panel>,
-      );
-
-      if (index !== previews.length - 1) {
-        children.push(<PanelResizeHandle className={resizePanelStyles.PanelResizeHandle} />);
+        );
       }
-    }
 
-    return createElement(PanelGroup, { direction: 'horizontal' }, ...children);
-  }),
+      const previews = expectedPreviews.filter((preview) => preview.ready);
+      const defaultSize = 100 / previews.length;
+      const minSize = 20;
+
+      const children = [];
+
+      for (const [index, preview] of previews.entries()) {
+        children.push(
+          <Panel defaultSize={defaultSize} minSize={minSize}>
+            <Preview
+              iframe={iframeRefs.current[index]}
+              preview={preview}
+              previewCount={previews.length}
+              first={index === 0}
+              last={index === previews.length - 1}
+              toggleTerminal={toggleTerminal}
+              i18n={i18n}
+            />
+          </Panel>,
+        );
+
+        if (index !== previews.length - 1) {
+          children.push(<PanelResizeHandle className={resizePanelStyles.PanelResizeHandle} />);
+        }
+      }
+
+      return createElement(PanelGroup, { direction: 'horizontal' }, ...children);
+    },
+  ),
 );
 PreviewPanel.displayName = 'PreviewPanel';
 
