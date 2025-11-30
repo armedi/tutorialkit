@@ -50,6 +50,8 @@ export class DockerClient {
   }
 
   async createSession(files: Files): Promise<{ id: string; output: string }> {
+    console.log('DockerClient.createSession called with files:', Object.keys(files));
+
     // convert Uint8Array to base64 for transport
     const transportFiles: Record<string, string | { base64: string }> = {};
 

@@ -82,6 +82,8 @@ export async function writeSessionFiles(
 }
 
 async function startContainer(session: Session): Promise<string> {
+  console.log('startContainer called for session:', session.id);
+
   const composeFile = path.join(session.tempDir, 'docker-compose.yml');
   const projectName = `tutorialkit-${session.id}`;
 
@@ -90,10 +92,10 @@ async function startContainer(session: Session): Promise<string> {
     const compose = createCompose(composeFile, projectName);
     session.compose = compose;
 
-    // pull images and start containers
-    await compose.pull();
+    console.log(`Starting container for session ${session.id} with compose file: ${composeFile}`);
 
-    const state = await compose.up();
+    // start containers (will build images if needed)
+    const state = await compose.up({ verbose: true });
 
     // get the container reference with retry logic
     const container = await getContainerByProjectWithRetry(projectName, 'app');
@@ -109,6 +111,8 @@ async function startContainer(session: Session): Promise<string> {
     return JSON.stringify(state, null, 2);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error starting container for session ${session.id}:`, error);
+
     return `Error starting container: ${message}`;
   }
 }
