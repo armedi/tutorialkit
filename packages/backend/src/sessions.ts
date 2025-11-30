@@ -24,7 +24,7 @@ export async function createSession(
   files: Record<string, string | { base64: string }>,
 ): Promise<{ session: Session; output: string }> {
   const sessionId = uuidv4();
-  const tempDir = path.join(os.tmpdir(), `tutorialkit-${sessionId}`);
+  const tempDir = path.join(os.homedir(), '.tutorialkit', 'sessions', `tutorialkit-${sessionId}`);
 
   // create temp directory
   await fs.mkdir(tempDir, { recursive: true });
@@ -404,4 +404,63 @@ export function removeTerminalFromSession(sessionId: string, terminalId: string)
   if (session.terminals.size === 0) {
     scheduleSessionCleanup(sessionId);
   }
+}
+
+/**
+ * Clean up stale session directories from previous runs.
+ * This should be called on server startup to remove orphaned containers and directories.
+ */
+export async function cleanupStaleSessions(): Promise<void> {
+  const sessionsDir = path.join(os.homedir(), '.tutorialkit', 'sessions');
+
+  try {
+    // check if sessions directory exists
+    await fs.access(sessionsDir);
+  } catch {
+    // directory doesn't exist, nothing to clean up
+    return;
+  }
+
+  const entries = await fs.readdir(sessionsDir, { withFileTypes: true });
+  const staleSessionDirs = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith('tutorialkit-'));
+
+  if (staleSessionDirs.length === 0) {
+    return;
+  }
+
+  console.log(`Cleaning up ${staleSessionDirs.length} stale session(s)...`);
+
+  for (const entry of staleSessionDirs) {
+    const sessionDir = path.join(sessionsDir, entry.name);
+    const composeFile = path.join(sessionDir, 'docker-compose.yml');
+
+    try {
+      // try to stop any running containers via docker-compose
+      const composeExists = await fs
+        .access(composeFile)
+        .then(() => true)
+        .catch(() => false);
+
+      if (composeExists) {
+        const projectName = entry.name; // e.g., tutorialkit-uuid
+        const compose = createCompose(composeFile, projectName);
+
+        try {
+          await compose.down({ volumes: true });
+          console.log(`  Stopped container for ${entry.name}`);
+        } catch {
+          // container may already be stopped or removed
+          console.log(`  No running container for ${entry.name}`);
+        }
+      }
+
+      // remove the directory
+      await fs.rm(sessionDir, { recursive: true, force: true });
+      console.log(`  Removed ${entry.name}`);
+    } catch (error) {
+      console.error(`  Failed to clean up ${entry.name}:`, error);
+    }
+  }
+
+  console.log('Stale session cleanup complete');
 }

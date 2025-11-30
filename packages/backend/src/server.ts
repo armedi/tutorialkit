@@ -4,7 +4,14 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { checkDockerHealth } from './docker.js';
-import { createSession, deleteSession, getSessionInfo, getSessionPorts, writeSessionFiles } from './sessions.js';
+import {
+  cleanupStaleSessions,
+  createSession,
+  deleteSession,
+  getSessionInfo,
+  getSessionPorts,
+  writeSessionFiles,
+} from './sessions.js';
 import { handleTerminalConnection, killAllProcesses } from './terminal.js';
 import type { CreateSessionRequest, HealthResponse, WriteFilesRequest } from './types.js';
 
@@ -157,7 +164,10 @@ export function createBackendServer(options: ServerOptions) {
   process.on('SIGTERM', shutdown);
 
   return {
-    start: () => {
+    start: async () => {
+      // clean up stale sessions from previous runs
+      await cleanupStaleSessions();
+
       server.listen(port, host, () => {
         console.log(`TutorialKit backend running at http://${host}:${port}`);
         console.log(`Health check: http://${host}:${port}/health`);
