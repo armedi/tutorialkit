@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:lts
 
 WORKDIR /app
 
@@ -8,5 +8,4 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Copy the rest of the application
-COPY . .
+CMD ["tail", "-f", "/dev/null"]
