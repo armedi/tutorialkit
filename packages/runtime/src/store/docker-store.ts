@@ -355,7 +355,6 @@ export class TutorialStore {
           await this._dockerRuntime.shutdown();
         }
 
-        console.log('[retryBoot] Booting Docker runtime for lesson:', lesson.data.title);
         await this._dockerRuntime.boot(template);
 
         signal.throwIfAborted();

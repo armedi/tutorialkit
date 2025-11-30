@@ -15,6 +15,7 @@ export class DockerClient {
     if (typeof localStorage !== 'undefined') {
       return localStorage.getItem(BACKEND_URL_KEY);
     }
+
     return null;
   }
 
@@ -24,6 +25,7 @@ export class DockerClient {
 
   set backendUrl(url: string) {
     this._backendUrl = url;
+
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(BACKEND_URL_KEY, url);
     }
@@ -50,8 +52,6 @@ export class DockerClient {
   }
 
   async createSession(files: Files): Promise<{ id: string; output: string }> {
-    console.log('DockerClient.createSession called with files:', Object.keys(files));
-
     // convert Uint8Array to base64 for transport
     const transportFiles: Record<string, string | { base64: string }> = {};
 
@@ -76,6 +76,7 @@ export class DockerClient {
 
     const result = await response.json();
     this._sessionId = result.id;
+
     return result;
   }
 
@@ -91,6 +92,7 @@ export class DockerClient {
         if (response.status === 404) {
           return null;
         }
+
         throw new Error('Failed to get session info');
       }
 
@@ -113,6 +115,7 @@ export class DockerClient {
       }
 
       const result = await response.json();
+
       return result.ports || [];
     } catch {
       return [];
@@ -167,6 +170,7 @@ export class DockerClient {
     }
 
     const wsUrl = this._backendUrl.replace(/^http/, 'ws');
+
     return new WebSocket(`${wsUrl}/sessions/${this._sessionId}/terminal?terminalId=${terminalId}`);
   }
 }

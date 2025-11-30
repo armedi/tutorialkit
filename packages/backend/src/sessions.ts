@@ -60,9 +60,10 @@ export async function writeFilesToDir(dir: string, files: Record<string, string 
     if (typeof content === 'string') {
       await fs.writeFile(fullPath, content, 'utf-8');
     } else {
-      // base64 encoded binary content
+      /* base64 encoded binary content - use Uint8Array for writeFile's types to avoid Buffer<>ArrayBuffer incompatibilities */
       const buffer = Buffer.from(content.base64, 'base64');
-      await fs.writeFile(fullPath, buffer);
+      const uint8 = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+      await fs.writeFile(fullPath, uint8);
     }
   }
 }
@@ -82,8 +83,6 @@ export async function writeSessionFiles(
 }
 
 async function startContainer(session: Session): Promise<string> {
-  console.log('startContainer called for session:', session.id);
-
   const composeFile = path.join(session.tempDir, 'docker-compose.yml');
   const projectName = `tutorialkit-${session.id}`;
 
@@ -91,8 +90,6 @@ async function startContainer(session: Session): Promise<string> {
     // create compose instance
     const compose = createCompose(composeFile, projectName);
     session.compose = compose;
-
-    console.log(`Starting container for session ${session.id} with compose file: ${composeFile}`);
 
     // start containers (will build images if needed)
     const state = await compose.up({ verbose: true });
@@ -202,22 +199,32 @@ export async function getSessionPorts(sessionId: string): Promise<PortMapping[]>
     return [];
   }
 
-  // parse docker-compose.yml to get port mappings
+  /* parse docker-compose.yml to get port mappings */
   try {
     const composeFile = path.join(session.tempDir, 'docker-compose.yml');
     const content = await fs.readFile(composeFile, 'utf-8');
-    const compose = parseYaml(content);
+    const compose: unknown = parseYaml(content);
 
     const ports: PortMapping[] = [];
+    type PortInput = string | number | { target: number; published: number };
 
-    if (compose.services) {
-      for (const service of Object.values(compose.services) as any[]) {
-        if (service.ports) {
-          for (const portMapping of service.ports) {
-            const parsed = parsePortMapping(portMapping);
+    if (compose && typeof compose === 'object' && 'services' in compose) {
+      const services = (compose as Record<string, unknown>).services;
 
-            if (parsed) {
-              ports.push(parsed);
+      if (services && typeof services === 'object') {
+        for (const service of Object.values(services as Record<string, unknown>)) {
+          if (service && typeof service === 'object') {
+            const svc = service as Record<string, unknown>;
+
+            if (Array.isArray(svc.ports)) {
+              for (const portMapping of svc.ports as Array<unknown>) {
+                const pm = portMapping as unknown as PortInput;
+                const parsed = parsePortMapping(pm);
+
+                if (parsed) {
+                  ports.push(parsed);
+                }
+              }
             }
           }
         }

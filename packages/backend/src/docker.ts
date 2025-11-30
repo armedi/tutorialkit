@@ -13,6 +13,7 @@ export function getDocker(): Docker {
 
 /**
  * Create a dockerode-compose instance for a compose file.
+ *
  * @param composePath - Absolute path to the docker-compose.yml file
  * @param projectName - Unique project name for this compose stack
  */
@@ -24,6 +25,7 @@ export function createCompose(composePath: string, projectName: string): Dockero
 /**
  * Get a container by its compose project name.
  * Returns the first container found with the matching project label.
+ *
  * @param projectName - The compose project name
  * @param serviceName - Optional service name to filter by (defaults to 'app')
  */
@@ -51,6 +53,7 @@ export async function getContainerByProject(
  * Get a container by its compose project name with retry logic.
  * Polls up to maxRetries times with a delay between attempts.
  * This is useful after compose.up() when container labels may not be immediately available.
+ *
  * @param projectName - The compose project name
  * @param serviceName - Optional service name to filter by (defaults to 'app')
  * @param maxRetries - Maximum number of retry attempts (default: 5)
@@ -79,6 +82,7 @@ export async function getContainerByProjectWithRetry(
 
 /**
  * Get all containers for a compose project.
+ *
  * @param projectName - The compose project name
  */
 export async function getContainersByProject(projectName: string): Promise<Docker.Container[]> {
